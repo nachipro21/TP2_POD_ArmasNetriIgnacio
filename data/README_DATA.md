@@ -2,9 +2,13 @@
 
 Este directorio aloja los conjuntos de datos de entrada en formatos equivalentes **CSV** y **JSON** para el catálogo de películas y sus calificaciones.
 
-## 1. Procedencia y método de construcción (Datos adaptados y simulados)
-1. **Catálogo base inspirado en MovieLens (`peliculas.csv` / `peliculas.json`):** Se tomaron 54 películas reales del conjunto público *MovieLens Latest Datasets (Small)* de **GroupLens Research** (University of Minnesota, `https://grouplens.org/datasets/movielens/`, licencia académica abierta *Harper & Konstan, 2015*), respetando su esquema original (`movieId`, `title`, `genres`). A esa base se le agregaron **2 títulos sin año** (`"Cosmos"` y `"Metropolis Restaurada"`) y **2 registros inválidos de prueba** (`movieId="10"` duplicado y `movieId="57"` con título vacío).
-2. **Valoraciones simuladas (`calificaciones.csv` / `calificaciones.json`):** Se generaron mediante un script reproducible **150 valoraciones válidas** dentro de la escala `[0.5, 5.0]` y **5 registros con errores intencionales** (`movieId` inexistentes `"9999"` y `"8888"`, puntajes fuera de rango `"6.5"` y `"-1.0"`, y valor no numérico `"N/A"`). Esta simulación controlada garantiza que se puedan verificar de forma exacta todos los casos exigidos por el Tema 10 (como el caso de una película con valoraciones `3` y `5` que da media `4.0` y conteo `2`, la exclusión por mínimo de opiniones y las reglas de desempate).
+## 1. Procedencia
+Los archivos **CSV fueron creados con ayuda de la IA Gemini**. Los JSON contienen los mismos datos, para comprobar la lectura de ambos formatos.
+
+- **Datos sintéticos:** películas, valoraciones, usuarios (`101` a `110`) y fechas son simulados; no representan opiniones reales.
+- **Responsable y fecha:** Ignacio Armas Netri, octubre de 2026.
+- **Condiciones de uso:** datos creados para este trabajo, sin datos personales ni información sensible.
+- **Casos de prueba incluidos a propósito:** 2 títulos sin año (`movieId` 54 `"Cosmos"` y 55 `"Metropolis Restaurada"`), 2 películas inválidas (`movieId="10"` repetido y `movieId="57"` sin título) y 5 calificaciones inválidas (`movieId` inexistentes `9999` y `8888`, ratings `6.5` y `-1.0`, y el valor no numérico `"N/A"`). Permiten verificar la validación y los casos del Tema 10 (valoraciones 3 y 5 → media 4.0, exclusión por mínimo y desempate).
 
 * **Fecha de consulta y generación:** Octubre de 2026.
 * **Privacidad:** Ningún archivo contiene datos personales reales ni información sensible.
@@ -30,3 +34,9 @@ Este directorio aloja los conjuntos de datos de entrada en formatos equivalentes
 * **`movieId`** (`str`): Identificador de la película evaluada (clave foránea hacia `peliculas`).
 * **`rating`** (`str` / convertible a `float`): Calificación en escala de `0.5` a `5.0` con incrementos de `0.5`.
 * **`timestamp`** (`str` / convertible a `int`): Instante sintético de la calificación en segundos Unix UTC.
+
+## 4. Limitaciones
+
+- La muestra es pequeña (58 películas, 155 valoraciones) y la mayoría de las películas tiene pocas opiniones.
+- Las valoraciones son simuladas, así que los promedios no reflejan el gusto del público real.
+- Los 7 registros con errores intencionales (2 del catálogo y 5 de calificaciones) y los 2 títulos sin año existen para probar la validación; no son datos reales.
