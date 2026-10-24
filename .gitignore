@@ -1,0 +1,46 @@
+# Entornos virtuales
+
+.venv/
+
+venv/
+
+env/
+
+
+
+# Cachés de Python y pruebas
+
+__pycache__/
+
+*.py[cod]
+
+*$py.class
+
+.pytest_cache/
+
+.coverage
+
+
+
+# Archivos del sistema operativo e IDEs
+
+.DS_Store
+
+Thumbs.db
+
+.vscode/
+
+.idea/
+
+
+
+# Secretos o configuraciones locales
+
+.env
+
+
+
+# Salidas generadas temporalmente (si no se versionan muestras de salida)
+
+outputs/*.tmp
+

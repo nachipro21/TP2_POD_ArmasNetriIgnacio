@@ -1,0 +1,5 @@
+# El proyecto utiliza exclusivamente la biblioteca estándar de Python 3.10+
+
+# (módulos: csv, json, re, abc, argparse, pathlib, unittest, typing)
+
+# No se requieren paquetes externos para ejecutar la aplicación ni las pruebas.
