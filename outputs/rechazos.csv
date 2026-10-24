@@ -1,0 +1,8 @@
+origen,fila,movieId,detalle,motivo
+catalogo,57,10,GoldenEye Duplicado (1995),movieId duplicado
+catalogo,58,57,,titulo vacio
+calificaciones,151,9999,"userId=109, rating=4.5",movieId inexistente en catalogo
+calificaciones,152,8888,"userId=110, rating=3.5",movieId inexistente en catalogo
+calificaciones,153,1,"userId=101, rating=6.5","rating fuera de escala [0.5, 5.0]"
+calificaciones,154,6,"userId=102, rating=-1.0","rating fuera de escala [0.5, 5.0]"
+calificaciones,155,10,"userId=103, rating=N/A",rating no numerico
