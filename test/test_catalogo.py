@@ -9,9 +9,15 @@ del Tema 10:
 4. Búsqueda sin coincidencias: devuelve lista vacía explícita.
 5. Propiedades del resultado: combinar catálogo y calificaciones no duplica opiniones,
    y las entradas equivalentes en CSV y JSON producen exactamente el mismo resultado.
+6. Validaciones adicionales: valoraciones repetidas de un mismo usuario, escala y timestamp,
+   esquema incompleto, películas sin valoraciones, errores de lectura y ejecución por consola.
 """
 
+import csv
+import json
+import os
 from pathlib import Path
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -233,6 +239,169 @@ class TestCatalogoPeliculas(unittest.TestCase):
                 salida_csv.read_text(encoding="utf-8"),
                 salida_json.read_text(encoding="utf-8"),
             )
+
+
+    def test_7_una_sola_opinion_por_usuario_y_pelicula(self) -> None:
+        """Si un usuario valora dos veces la misma película cuenta la más reciente."""
+        peliculas = [
+            {"movieId": "1", "title": "Toy Story (1995)", "genres": "Comedy"},
+            {"movieId": "2", "title": "Heat (1995)", "genres": "Crime"},
+        ]
+        calificaciones = [
+            {"userId": "1", "movieId": "1", "rating": "2.0", "timestamp": "100"},
+            {"userId": "1", "movieId": "1", "rating": "5.0", "timestamp": "200"},  # más reciente
+            {"userId": "2", "movieId": "1", "rating": "3.0", "timestamp": "150"},
+            # Empate de timestamp: se conserva la que aparece más abajo en el archivo
+            {"userId": "3", "movieId": "2", "rating": "1.0", "timestamp": "300"},
+            {"userId": "3", "movieId": "2", "rating": "4.0", "timestamp": "300"},
+        ]
+        catalogo, _ = construir_catalogo(peliculas)
+        rechazos = acumular_valoraciones(catalogo, calificaciones)
+
+        self.assertEqual(catalogo["1"]["cantidad_valoraciones"], 2)
+        self.assertAlmostEqual(catalogo["1"]["media_valoraciones"], 4.0)  # (5.0 + 3.0) / 2
+        self.assertEqual(catalogo["2"]["cantidad_valoraciones"], 1)
+        self.assertAlmostEqual(catalogo["2"]["media_valoraciones"], 4.0)
+        self.assertEqual([r["fila"] for r in rechazos], [1, 4])
+        for rechazo in rechazos:
+            self.assertIn("duplicada", rechazo["motivo"])
+
+    def test_8_validacion_de_escala_usuario_y_timestamp(self) -> None:
+        """Rechaza ratings que no son múltiplo de 0.5, userId vacío y timestamps inválidos."""
+        peliculas = [{"movieId": "1", "title": "Toy Story (1995)", "genres": "Comedy"}]
+        calificaciones = [
+            {"userId": "1", "movieId": "1", "rating": "4.0", "timestamp": "10"},    # válida
+            {"userId": "2", "movieId": "1", "rating": "3.7", "timestamp": "11"},    # no múltiplo de 0.5
+            {"userId": "",  "movieId": "1", "rating": "4.0", "timestamp": "12"},    # userId vacío
+            {"userId": "4", "movieId": "1", "rating": "4.0", "timestamp": "abc"},   # timestamp no numérico
+            {"userId": "5", "movieId": "1", "rating": "4.0", "timestamp": "-5"},    # timestamp negativo
+            {"userId": "6", "movieId": "1", "rating": "nan", "timestamp": "14"},    # no es un número válido
+            {"userId": "7", "movieId": "1", "rating": "",    "timestamp": "15"},    # valor faltante
+        ]
+        catalogo, _ = construir_catalogo(peliculas)
+        rechazos = acumular_valoraciones(catalogo, calificaciones)
+
+        self.assertEqual(catalogo["1"]["cantidad_valoraciones"], 1)
+        self.assertEqual(len(rechazos), 6)
+        motivos = [r["motivo"] for r in rechazos]
+        self.assertIn("rating no es multiplo de 0.5", motivos)
+        self.assertIn("userId vacio", motivos)
+        self.assertEqual(motivos.count("timestamp invalido"), 2)
+
+    def test_9_pelicula_sin_valoraciones_no_tiene_media_cero(self) -> None:
+        """Una película sin opiniones queda con media None (no 0.0) y se exporta vacía."""
+        peliculas = [
+            {"movieId": "1", "title": "Toy Story (1995)", "genres": "Comedy"},
+            {"movieId": "2", "title": "Heat (1995)", "genres": "Comedy"},
+        ]
+        calificaciones = [
+            {"userId": "1", "movieId": "1", "rating": "4.0", "timestamp": "1"},
+        ]
+        catalogo, _ = construir_catalogo(peliculas)
+        acumular_valoraciones(catalogo, calificaciones)
+
+        self.assertEqual(catalogo["2"]["cantidad_valoraciones"], 0)
+        self.assertIsNone(catalogo["2"]["media_valoraciones"])
+
+        consulta = ConsultaCatalogo(min_valoraciones=0)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            salida = Path(tmpdir) / "lista.csv"
+            lista = generar_lista(
+                buscar_titulos(catalogo, consulta), min_valoraciones=0, ruta_salida=salida
+            )
+            self.assertEqual([p["movieId"] for p in lista], ["1", "2"])
+            with salida.open(encoding="utf-8", newline="") as archivo:
+                filas = list(csv.DictReader(archivo))
+        self.assertEqual(filas[1]["media_valoraciones"], "")
+
+        # Con el mínimo habitual (>= 1) la película sin opiniones no aparece.
+        lista_min1 = generar_lista(buscar_titulos(catalogo, consulta), min_valoraciones=1)
+        self.assertEqual([p["movieId"] for p in lista_min1], ["1"])
+
+    def test_10_esquema_incompleto_en_cualquier_registro(self) -> None:
+        """Un registro sin una columna obligatoria (no solo el primero) produce un error claro."""
+        peliculas = [
+            {"movieId": "1", "title": "Toy Story (1995)", "genres": "Comedy"},
+            {"movieId": "2", "title": "Heat (1995)"},  # falta 'genres'
+        ]
+        with self.assertRaises(ValueError) as contexto:
+            construir_catalogo(peliculas)
+        self.assertIn("genres", str(contexto.exception))
+        self.assertIn("registro 2", str(contexto.exception))
+
+        catalogo, _ = construir_catalogo(
+            [{"movieId": "1", "title": "Toy Story (1995)", "genres": "Comedy"}]
+        )
+        with self.assertRaises(ValueError):
+            acumular_valoraciones(catalogo, [])  # tabla vacía
+
+    def test_11_errores_de_lectura_no_se_ocultan_y_csv_json_equivalen(self) -> None:
+        """Archivo inexistente, vacío o mal formado fallan con error explícito."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            carpeta = Path(tmpdir)
+
+            with self.assertRaises(FileNotFoundError):
+                FuenteCSV().cargar(carpeta / "no_existe.csv")
+
+            vacio = carpeta / "vacio.csv"
+            vacio.write_text("", encoding="utf-8")
+            with self.assertRaises(ValueError):
+                FuenteCSV().cargar(vacio)
+
+            roto = carpeta / "roto.json"
+            roto.write_text("{esto no es json", encoding="utf-8")
+            with self.assertRaises(ValueError):
+                FuenteJSON().cargar(roto)
+
+            no_lista = carpeta / "objeto.json"
+            no_lista.write_text('{"movieId": "1"}', encoding="utf-8")
+            with self.assertRaises(ValueError):
+                FuenteJSON().cargar(no_lista)
+
+            # Mismo contenido en ambos formatos (incluye una coma dentro de un título entre comillas)
+            ruta_csv = carpeta / "mini.csv"
+            ruta_csv.write_text(
+                'movieId,title,genres\n11,"American President, The (1995)",Comedy|Drama\n',
+                encoding="utf-8",
+            )
+            ruta_json = carpeta / "mini.json"
+            ruta_json.write_text(
+                json.dumps(
+                    [{"movieId": 11, "title": "American President, The (1995)", "genres": "Comedy|Drama"}]
+                ),
+                encoding="utf-8",
+            )
+            self.assertEqual(FuenteCSV().cargar(ruta_csv), FuenteJSON().cargar(ruta_json))
+
+        with self.assertRaises(ValueError):
+            crear_fuente("xml")
+        with self.assertRaises(ValueError):
+            FuenteCSV(delimitador=";;")
+
+    def test_12_ejecucion_por_consola_desde_cualquier_directorio(self) -> None:
+        """La CLI funciona desde otro directorio y falla con código 1 ante parámetros inválidos."""
+        main_py = RUTA_RAIZ / "src" / "main.py"
+        entorno = {**os.environ, "PYTHONIOENCODING": "utf-8"}
+        with tempfile.TemporaryDirectory() as tmpdir:
+            salida = Path(tmpdir) / "lista.csv"
+            rechazos = Path(tmpdir) / "rechazos.csv"
+            ok = subprocess.run(
+                [sys.executable, str(main_py), "--genero", "Crime",
+                 "--ruta-salida", str(salida), "--ruta-rechazos", str(rechazos)],
+                cwd=tmpdir, env=entorno, capture_output=True, text=True, encoding="utf-8",
+            )
+            self.assertEqual(ok.returncode, 0, ok.stderr)
+            self.assertTrue(salida.exists())
+            self.assertTrue(rechazos.exists())
+            self.assertIn("Total seleccionadas", ok.stdout)
+
+            error = subprocess.run(
+                [sys.executable, str(main_py), "--anio", "1500",
+                 "--ruta-salida", str(salida), "--ruta-rechazos", str(rechazos)],
+                cwd=tmpdir, env=entorno, capture_output=True, text=True, encoding="utf-8",
+            )
+            self.assertEqual(error.returncode, 1)
+            self.assertIn("1888", error.stderr)
 
 
 if __name__ == "__main__":

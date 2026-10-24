@@ -1,5 +1,4 @@
-# TP2_POD_ArmasNetriIgnacio
-# Catálogo de películas con listas de selección — TP2
+# TP2_POD_ArmasNetriIgnacio — Catálogo de películas con listas de selección
 
 **Asignatura:** Programación Orientada a Datos — Licenciatura en Ciencia de Datos, UCA  
 **Autor:** Ignacio Armas Netri
@@ -24,7 +23,7 @@ La carpeta `data/` contiene muestras equivalentes en CSV y JSON:
 
 El catálogo contiene **58 películas** y la tabla contiene **155 valoraciones**. `movieId` relaciona ambas tablas; `genres` contiene géneros separados por `|`; `rating` usa una escala de 0.5 a 5.0; `timestamp` es una marca temporal Unix.
 
-**Procedencia:** los archivos CSV fueron generados por la IA gemini, para este trabajo. Los JSON contienen los mismos datos para comprobar la lectura de ambos formatos. Las valoraciones, los identificadores de usuario y las fechas también son sintéticos. No es una descarga oficial de MovieLens y las puntuaciones no representan opiniones reales.
+**Procedencia:** los archivos CSV fueron generados con ayuda de una IA (Gemini), para este trabajo. Los JSON contienen los mismos datos para comprobar la lectura de ambos formatos. Las valoraciones, los identificadores de usuario y las fechas también son sintéticos. No es una descarga oficial de MovieLens y las puntuaciones no representan opiniones reales.
 
 **Limitaciones:** es una muestra pequeña y sus valoraciones son simuladas, por lo que no permite concluir cuáles son las películas mejor valoradas por el público real.
 
@@ -88,3 +87,22 @@ El programa produce una tabla de salida (en consola y exportada a `outputs/`) co
      1. `media` descendente (mayor puntuación promedio primero),
      2. `cantidad` descendente (ante igual promedio, prioriza la película con mayor respaldo de opiniones),
      3. `titulo_limpio` alfabético ascendente (criterio determinista final).
+
+## 8. Ejemplo de resultado (`python3 src/main.py`, primeras filas)
+```text
+Filtros: texto=Todos | genero=Todos | anio=Todos | min_valoraciones=2
+ID    | Título                         | Año  | Géneros                  | Val. | Media
+858   | Godfather, The                 | 1972 | Crime, Drama             | 5    | 4.90
+318   | Shawshank Redemption, The      | 1994 | Crime, Drama             | 6    | 4.83
+296   | Pulp Fiction                   | 1994 | Comedy, Crime, Drama, Th | 5    | 4.80
+Total seleccionadas: 49 | Rechazos de catálogo: 2 | Rechazos de calificaciones: 5
+```
+Con `--min-valoraciones 1` *Lamerica* (una sola valoración de 5.0) aparece primero, por encima de *The Godfather*; con el mínimo por defecto queda excluida. `outputs/` conserva la salida de esa ejecución: la lista (49 películas) y `rechazos.csv` (7 filas descartadas con su motivo).
+
+## 9. Pruebas
+`python3 -m unittest discover -s tests -v` ejecuta 12 pruebas: caso normal (valoraciones 3 y 5 → media 4.0, cantidad 2), exclusión por mínimo, regex, entradas inválidas, búsqueda sin coincidencias, desempate, duplicados, escala y `timestamp`, esquema incompleto, errores de lectura, equivalencia CSV/JSON y ejecución por consola.
+
+## 10. Interpretación y limitaciones
+- El mínimo es un umbral, no una corrección estadística: con mínimo 2, una película con 2 valoraciones y promedio 4.25 supera a otra con 4 valoraciones y promedio 4.00. Una media ajustada (p. ej. bayesiana) queda fuera de esta versión.
+- Los datos son simulados y la mayoría de las películas tiene solo 2 a 4 valoraciones: los resultados demuestran el funcionamiento, no recomiendan películas.
+- Género y año se comparan de forma exacta; no hay rangos de años ni varios géneros en una misma consulta.

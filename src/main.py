@@ -14,6 +14,12 @@ RUTA_RAIZ = Path(__file__).resolve().parent.parent
 if str(RUTA_RAIZ) not in sys.path:
     sys.path.insert(0, str(RUTA_RAIZ))
 
+# Las rutas por defecto se resuelven desde la raíz del repositorio, para que la
+# aplicación funcione sin importar desde qué directorio se ejecute.
+DIR_DATOS = RUTA_RAIZ / "data"
+RUTA_SALIDA_POR_DEFECTO = RUTA_RAIZ / "outputs" / "lista_seleccionada.csv"
+RUTA_RECHAZOS_POR_DEFECTO = RUTA_RAIZ / "outputs" / "rechazos.csv"
+
 try:
     from src.fuentes import crear_fuente
     from src.modelo import ConsultaCatalogo
@@ -86,16 +92,24 @@ def construir_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--ruta-salida",
         type=str,
-        default="outputs/lista_seleccionada.csv",
-        help="Ruta del archivo CSV donde se exportará la lista seleccionada.",
+        default=None,
+        help="Ruta del CSV donde se exportará la lista seleccionada (por defecto: outputs/lista_seleccionada.csv).",
     )
     parser.add_argument(
         "--ruta-rechazos",
         type=str,
-        default="outputs/rechazos.csv",
-        help="Ruta del archivo CSV donde se exportarán los registros rechazados.",
+        default=None,
+        help="Ruta del CSV donde se exportarán los registros rechazados (por defecto: outputs/rechazos.csv).",
     )
     return parser
+
+
+def ruta_legible(ruta: str | Path) -> str:
+    """Muestra una ruta relativa a la raíz del repositorio cuando está dentro de ella."""
+    try:
+        return str(Path(ruta).resolve().relative_to(RUTA_RAIZ))
+    except ValueError:
+        return str(ruta)
 
 
 def mostrar_tabla_resultados(
@@ -103,8 +117,8 @@ def mostrar_tabla_resultados(
     consulta: ConsultaCatalogo,
     cant_rechazos_cat: int,
     cant_rechazos_cal: int,
-    ruta_salida: str,
-    ruta_rechazos: str,
+    ruta_salida: str | Path,
+    ruta_rechazos: str | Path,
 ) -> None:
     """Imprime en consola un resumen legible de la ejecución y la tabla ordenada."""
     linea = "-" * 84
@@ -122,7 +136,8 @@ def mostrar_tabla_resultados(
             anio_str = str(p["anio"]) if p["anio"] is not None else "S/A"
             generos_str = ", ".join(p["generos"])[:24]
             val_str = str(p["cantidad_valoraciones"])
-            media_str = f"{p['media_valoraciones']:.2f}"
+            media = p["media_valoraciones"]
+            media_str = "s/d" if media is None else f"{media:.2f}"
             print(
                 f"{p['movieId']:<5} | {titulo_corto:<30} | {anio_str:<4} | "
                 f"{generos_str:<24} | {val_str:<4} | {media_str:<5}"
@@ -134,7 +149,7 @@ def mostrar_tabla_resultados(
         f"Rechazos de catálogo: {cant_rechazos_cat} | "
         f"Rechazos de calificaciones: {cant_rechazos_cal}"
     )
-    print(f"Archivos exportados en: {ruta_salida} y {ruta_rechazos}")
+    print(f"Archivos exportados en: {ruta_legible(ruta_salida)} y {ruta_legible(ruta_rechazos)}")
 
 
 def ejecutar_flujo(args: argparse.Namespace) -> int:
@@ -143,13 +158,16 @@ def ejecutar_flujo(args: argparse.Namespace) -> int:
     ruta_peliculas = (
         Path(args.ruta_peliculas)
         if args.ruta_peliculas
-        else Path(f"data/peliculas.{formato}")
+        else DIR_DATOS / f"peliculas.{formato}"
     )
     ruta_calificaciones = (
         Path(args.ruta_calificaciones)
         if args.ruta_calificaciones
-        else Path(f"data/calificaciones.{formato}")
+        else DIR_DATOS / f"calificaciones.{formato}"
     )
+
+    ruta_salida = Path(args.ruta_salida) if args.ruta_salida else RUTA_SALIDA_POR_DEFECTO
+    ruta_rechazos = Path(args.ruta_rechazos) if args.ruta_rechazos else RUTA_RECHAZOS_POR_DEFECTO
 
     fuente = crear_fuente(formato)
     filas_peliculas = fuente.cargar(ruta_peliculas)
@@ -169,19 +187,19 @@ def ejecutar_flujo(args: argparse.Namespace) -> int:
     lista_final = generar_lista(
         peliculas_filtradas,
         min_valoraciones=consulta.min_valoraciones,
-        ruta_salida=args.ruta_salida,
+        ruta_salida=ruta_salida,
     )
 
     todos_los_rechazos = rechazos_catalogo + rechazos_calificaciones
-    exportar_rechazos_csv(todos_los_rechazos, args.ruta_rechazos)
+    exportar_rechazos_csv(todos_los_rechazos, ruta_rechazos)
 
     mostrar_tabla_resultados(
         lista_peliculas=lista_final,
         consulta=consulta,
         cant_rechazos_cat=len(rechazos_catalogo),
         cant_rechazos_cal=len(rechazos_calificaciones),
-        ruta_salida=args.ruta_salida,
-        ruta_rechazos=args.ruta_rechazos,
+        ruta_salida=ruta_salida,
+        ruta_rechazos=ruta_rechazos,
     )
     return 0
 
