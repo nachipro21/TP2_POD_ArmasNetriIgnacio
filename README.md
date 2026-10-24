@@ -65,6 +65,7 @@ tp2-apellido/
 |   |-- calificaciones.csv
 |   `-- calificaciones.json
 `-- outputs/                # Directorio de salida para listas generadas y reporte de rechazos
+```
 
 ## 5. Requisitos
 
